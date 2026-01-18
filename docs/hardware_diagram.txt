@@ -1,0 +1,27 @@
+Four-STA WiFi Sonar Layout (20 MHz, channel 6, HT-LTF enabled)
+
+Legend:
+  [AP]  QT Py ESP32-S2 acting as WiFi sonar access point
+  [Sx]  Adafruit FeatherS3 station (x = 1..4) extracting CSI
+
+Top view (room ~4 m × 4 m, AP mounted at 1.5 m height on tripod):
+
+     North wall
+  ┌──────────────────────────────────────┐
+  │              [S1]                    │
+  │                                      │
+  │  [S2]                      [S3]      │
+  │                                      │
+  │                  [AP]                │
+  │                                      │
+  │   0.5 m                  0.5 m       │
+  │                                      │
+  │  [S4]                      (Door)    │
+  └──────────────────────────────────────┘
+             South wall / entry
+
+Placement notes:
+- QT Py AP centered to maximize LOS overlap; tripod tilt 5° downward per thesis Fig. 5.8.
+- FeatherS3 boards on insulated stands at 1.0 m height, 0.3 m away from walls to minimize multipath nulls.
+- Maintain ≥0.5 m spacing between STAs; orient USB connectors outward for airflow and antenna clearance.
+

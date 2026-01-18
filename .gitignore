@@ -1,0 +1,26 @@
+# Build directories
+build/
+__pycache__/
+*.pyc
+
+# ESP-IDF generated
+sdkconfig.old
+dependencies.lock
+
+# Managed components (can be re-downloaded)
+managed_components/
+
+# IDE
+.vscode/
+*.code-workspace
+
+# Python virtual env
+venv/
+.env
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log

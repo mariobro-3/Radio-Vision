@@ -1,0 +1,59 @@
+menu "WiFi Sonar AP Settings"
+
+config WIFI_SONAR_AP_SSID
+    string "SoftAP SSID"
+    default "sonar-ap-20mhz"
+    help
+        SSID advertised by the QT Py soft AP. Thesis p. 122 recommends a
+        distinct SSID per sensing cell to avoid roaming jitter.
+
+config WIFI_SONAR_AP_PASSWORD
+    string "SoftAP password (>=8 chars)"
+    default "sonarCSI2025"
+    help
+        WPA2 password. Use at least 8 ASCII chars.
+
+config WIFI_SONAR_CHANNEL
+    int "Primary channel (1 or 6 recommended)"
+    range 1 11
+    default 6
+    help
+        Fix channel to 1 or 6 to maintain 20 MHz bandwidth (Thesis p. 64).
+
+config WIFI_SONAR_LINK_RATE_HZ
+    int "Per-link ping rate (Hz)"
+    range 50 200
+    default 120
+    help
+        Stable range per Thesis p. 141: 100–150 Hz per link.
+
+config WIFI_SONAR_TARGET_PORT
+    int "UDP target port on STAs"
+    range 1024 65535
+    default 3333
+
+config WIFI_SONAR_STA_COUNT
+    int "Number of STA nodes to schedule"
+    range 1 4
+    default 4
+
+config WIFI_SONAR_STA0_IP
+    string "STA0 IPv4 address"
+    default "192.168.4.2"
+config WIFI_SONAR_STA1_IP
+    string "STA1 IPv4 address"
+    default "192.168.4.3"
+config WIFI_SONAR_STA2_IP
+    string "STA2 IPv4 address"
+    default "192.168.4.4"
+config WIFI_SONAR_STA3_IP
+    string "STA3 IPv4 address"
+    default "192.168.4.5"
+
+config WIFI_SONAR_PING_PAYLOAD_BYTES
+    int "Payload bytes per ping"
+    range 16 256
+    default 64
+
+endmenu
+

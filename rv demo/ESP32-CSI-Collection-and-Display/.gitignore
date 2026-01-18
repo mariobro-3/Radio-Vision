@@ -1,0 +1,6 @@
+build/
+.DS_Store
+# Auto-generated ESP-IDF config artifacts
+sdkconfig
+sdkconfig.old
+sdkconfig.*
