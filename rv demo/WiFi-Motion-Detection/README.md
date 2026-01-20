@@ -11,20 +11,25 @@ A WiFi-based motion detection system using Channel State Information (CSI) from 
 ### Setup
 ```powershell
 # 1. Source ESP-IDF
-. C:\Users\laser\esp-idf\export.ps1
+. path/to/esp-idf/export.ps1
 
-# 2. Flash AP (COM19)
-cd "WiFi-Motion-Detection/active_ap"
-idf.py build && idf.py -p COM19 flash
+# 2. Flash AP (replace COM_AP with your port)
+cd "active_ap"
+idf.py build
+idf.py -p COM_AP flash
 
-# 3. Flash Clients (COM15, COM17)
+# 3. Flash Clients (replace with your ports)
 cd "../active_client"
-idf.py build && idf.py -p COM15 flash && idf.py -p COM17 flash
+idf.py build
+idf.py -p COM_CLIENT1 flash
+idf.py -p COM_CLIENT2 flash
 
 # 4. Run Dashboard
 cd "../active_ap"
 python web_dashboard.py
 ```
+
+> **Finding COM ports**: Open Device Manager → Ports (COM & LPT)
 
 ### Access Dashboard
 1. Connect PC WiFi to `ESP32-AP` (password: `esp32-ap`)
@@ -36,13 +41,13 @@ python web_dashboard.py
 ## System Architecture
 
 ```
-Client1 (COM15) ──ping──┐
-                        ├──> AP (COM19) ──UDP──> Dashboard (localhost:8080)
-Client2 (COM17) ──ping──┘        │
-                                 ↓
-                         CSI extraction
-                         Motion detection
-                         NeoPixel feedback
+Client1 ──ping──┐
+                ├──> AP ──UDP──> Dashboard (localhost:8080)
+Client2 ──ping──┘      │
+                       ↓
+               CSI extraction
+               Motion detection
+               NeoPixel feedback
 ```
 
 ### How It Works

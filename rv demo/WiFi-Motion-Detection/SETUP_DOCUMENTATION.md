@@ -11,18 +11,20 @@ This system uses WiFi Channel State Information (CSI) to detect human motion. Wh
 ## Hardware Setup
 
 ### Devices
-| Role | Board | COM Port | Description |
-|------|-------|----------|-------------|
-| **AP (Access Point)** | FeatherS3D (ESP32-S3) | COM19 | Creates WiFi network, collects CSI, detects motion |
-| **Client 1** | FeatherS3D (ESP32-S3) | COM15 | Connects to AP, pings continuously |
-| **Client 2** | FeatherS3D (ESP32-S3) | COM17 | Connects to AP, pings continuously |
+| Role | Board | Description |
+|------|-------|-------------|
+| **AP (Access Point)** | FeatherS3D (ESP32-S3) | Creates WiFi network, collects CSI, detects motion |
+| **Client 1** | FeatherS3D (ESP32-S3) | Connects to AP, pings continuously |
+| **Client 2** | FeatherS3D (ESP32-S3) | Connects to AP, pings continuously |
+
+> **Finding COM ports**: Open Device Manager → Ports (COM & LPT) to see which port each ESP32 is assigned to.
 
 ### Physical Arrangement
 ```
-        AP (COM19)
-       /          \
-      /            \
-Client1 (COM15)    Client2 (COM17)
+        AP
+       /  \
+      /    \
+Client1    Client2
 ```
 - Motion is detected along the signal paths: Client1↔AP and Client2↔AP
 - Best detection occurs when walking perpendicular through a signal path
@@ -177,27 +179,27 @@ The threshold is set to the midpoint between the quiet baseline and motion level
 
 #### 1. Source ESP-IDF Environment
 ```powershell
-. C:\Users\laser\esp-idf\export.ps1
+. path/to/esp-idf/export.ps1
 ```
 
-#### 2. Flash AP (COM19)
+#### 2. Flash AP
 ```powershell
-cd "C:\Users\laser\Documents\RV2\rv demo\WiFi-Motion-Detection\active_ap"
+cd "active_ap"
 idf.py build
-idf.py -p COM19 flash
+idf.py -p COM_AP flash    # Replace COM_AP with your port
 ```
 
-#### 3. Flash Clients (COM15, COM17)
+#### 3. Flash Clients
 ```powershell
-cd "C:\Users\laser\Documents\RV2\rv demo\WiFi-Motion-Detection\active_client"
+cd "../active_client"
 idf.py build
-idf.py -p COM15 flash
-idf.py -p COM17 flash
+idf.py -p COM_CLIENT1 flash    # Replace with your ports
+idf.py -p COM_CLIENT2 flash
 ```
 
 ### Run Dashboard
 ```powershell
-cd "C:\Users\laser\Documents\RV2\rv demo\WiFi-Motion-Detection\active_ap"
+cd "../active_ap"
 python web_dashboard.py
 ```
 
