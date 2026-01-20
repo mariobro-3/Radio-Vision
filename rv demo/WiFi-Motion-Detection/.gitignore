@@ -1,0 +1,31 @@
+# Build directories
+build/
+__pycache__/
+*.pyc
+
+# ESP-IDF generated
+sdkconfig
+sdkconfig.old
+sdkconfig.*
+dependencies.lock
+managed_components/
+
+# IDE
+.vscode/
+*.code-workspace
+
+# Python
+venv/
+.env
+*.egg-info/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.bak
