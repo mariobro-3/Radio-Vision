@@ -159,18 +159,36 @@ void app_main(void)
     rv_radio_set_rx_gain(CONFIG_RV_RX_GAIN);
 
 #if CONFIG_RV_ROLE_TX
+#if !CONFIG_RV_TX_ACK
+    /* Compliance gate: raw-IQ transmit is out of the FCC grant. Refuse to
+     * radiate until the operator confirms a licence or a dummy load / shield
+     * (menuconfig -> RadioVision sounder -> RV_TX_ACK). See docs/COMPLIANCE.md. */
+    ESP_LOGE(TAG, "RAW_DAC transmit disabled for compliance.");
+    ESP_LOGE(TAG, "Enable RV_TX_ACK only if licensed (amateur) or using a dummy");
+    ESP_LOGE(TAG, "load / shield. The board will idle (no RF). See docs/COMPLIANCE.md.");
+    while (1) vTaskDelay(pdMS_TO_TICKS(5000));
+#else
     int root = CONFIG_RV_ZC_U;
 #if CONFIG_RV_ROOT_FROM_MAC
     root = rv_zc_root_for_id(mac_id(), N);
 #endif
     rv_cf *code = xmalloc(sizeof(rv_cf) * N);
     if (rv_zc(N, root, code, N) != N) { ESP_LOGE(TAG, "bad N/u"); return; }
+
+    /* amateur-band operating reminders (channel 1/6 stay inside 2390-2450 MHz) */
+    if (CHANNEL > 6)
+        ESP_LOGW(TAG, "channel %d may fall outside the 13 cm amateur segment; "
+                 "use channel 1 or 6 for licensed operation", CHANNEL);
+    if (sizeof(CONFIG_RV_HAM_CALLSIGN) > 1)
+        ESP_LOGW(TAG, "ID your station (%s) per Part 97", CONFIG_RV_HAM_CALLSIGN);
+
     ESP_LOGI(TAG, "role=TX: illuminating with code root %d (tell your RX boards)", root);
     ESP_ERROR_CHECK(rv_radio_replay_start(code, N, /*rate80=*/false));
     while (1) {
         vTaskDelay(pdMS_TO_TICKS(5000));
         ESP_LOGI(TAG, "TX root %d replay running", root);
     }
+#endif /* RV_TX_ACK */
 #else
     ESP_LOGI(TAG, "role=RX: capturing and detecting (multistatic CDMA)");
     s_rx      = xmalloc(sizeof(rv_cf) * (R + 1) * N);

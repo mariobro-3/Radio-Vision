@@ -175,10 +175,23 @@ The **sensing/receive side is passive and harmless.** The **raw-IQ transmitter i
 not FCC-compliant for open-air use as-is** — not because spread spectrum at 2.4 GHz
 is disallowed (§15.247 expressly allows it), but because it transmits through the
 undocumented DAC path, which operates the module outside its FCC grant and emits
-uncalibrated spurs. For open-air operation, either build the **`WIFI_CERTIFIED`**
-illumination mode above, run the raw-IQ mode **under an amateur licence** (dropping
-the encrypted DSSS payload, per §97.113), or keep it on a **dummy load / shielded
-bench**. Full analysis and the limits involved: [docs/COMPLIANCE.md](docs/COMPLIANCE.md).
+uncalibrated spurs. Pick the mode for how you'll operate:
+
+- **No licence →** `WIFI_CERTIFIED`: license-exempt Part 15 operation through the
+  certified radio.
+- **Licensed (amateur) →** `RAW_DAC`, operated per Part 97 (channel 1/6, station
+  ID, no message encryption). Raw transmit is gated behind a `RV_TX_ACK` build
+  option so the board won't radiate until you confirm a licence or a dummy load.
+- **Neither →** `RAW_DAC` on a **dummy load / shielded bench** only.
+
+Two different keyed things, only one restricted: the **spreading code** (the
+sounding waveform) is spread spectrum carrying no message — allowed everywhere, and
+it's what gives the processing-gain / low-noise-floor and the noise-like,
+code-gated obscurity. **Message-payload encryption** is the thing §97.113 forbids on
+amateur bands, so it's offered **only in `WIFI_CERTIFIED` (Part 15)** and is
+unavailable in `RAW_DAC`. There's no authentication layer — the sounder sends
+nothing that needs protecting. Full analysis, limits, and the ham checklist:
+[docs/COMPLIANCE.md](docs/COMPLIANCE.md).
 
 > Not legal advice — verify against current 47 CFR Part 15 / Part 97.
 

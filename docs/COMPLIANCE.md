@@ -57,6 +57,37 @@ modulation.
 | **Bench / dummy load / shielded** | raw-IQ mode into an attenuated/50 Ω load or Faraday enclosure | development only, not deployment |
 | **Formal equipment authorization** | test + certify the intentional radiator | proper but impractical for a hobby build |
 
+## Spreading code vs message encryption (they are not the same thing)
+
+RadioVision keys two different things; only one is restricted on amateur bands.
+
+- **Keyed spreading code** (the Zadoff-Chu root / Gold / m-sequence) is the
+  sounding waveform. It is *spread spectrum*, which is allowed for licensed
+  amateurs on 2.4 GHz, and in pure sounding it carries **no message**, so
+  §97.113's "no obscuring the meaning of a message" does not apply. It is also
+  what gives the processing gain / low-noise-floor behavior and a
+  low-probability-of-intercept property (noise-like, only despreads with the
+  code). **It stays on in every mode.**
+- **Message-payload encryption** (`rv_payload_crypt`) obscures the content of a
+  transmitted message. That is what §97.113 forbids on amateur bands. It is
+  therefore **available only in `WIFI_CERTIFIED` (Part 15) mode** and is
+  structurally unavailable in `RAW_DAC` (the Kconfig option depends on the Wi-Fi
+  illumination mode). Under Part 15 encryption is unrestricted.
+
+There is no authentication layer: the sounder sends no message that needs
+protecting.
+
+## Operating RAW_DAC under an amateur licence - checklist
+
+- Confirm the licence/dummy-load gate: `RV_TX_ACK` (the TX board idles otherwise).
+- Stay in the 13 cm segment: use **channel 1 or 6** (channel 11 spills past
+  2450 MHz). The firmware warns if the channel is above 6.
+- **Identify your station** (`RV_HAM_CALLSIGN` is logged as a reminder; you must
+  actually transmit your ID per Part 97).
+- Do **not** enable payload encryption (it is not offered in this mode anyway).
+- Keep power low and watch spurious emissions; a licence does not waive the
+  spurious-emission limits.
+
 ## Build switch
 
 `firmware/rv_sounder` → `idf.py menuconfig` → **RadioVision sounder → Illumination
@@ -66,7 +97,11 @@ source**:
   Open-air use needs an amateur license or a dummy load / shielded setup.
 - `WIFI_CERTIFIED`: the compliant path. TX sends HT20 probe frames on the certified
   radio; RX runs the gain-invariant detector on Wi-Fi CSI. No undocumented
-  registers are exercised at runtime.
+  registers are exercised at runtime. Optional probe-payload encryption
+  (`RV_PAYLOAD_ENCRYPT`) is available here only.
+
+In `RAW_DAC` + TX, transmit is gated behind `RV_TX_ACK` (licence or dummy load);
+without it the board idles and emits nothing.
 
 The RX in `WIFI_CERTIFIED` mode reuses the same `rv_detector`; it is the honest,
 in-grant fallback and corresponds to the "standard CSI" curves in

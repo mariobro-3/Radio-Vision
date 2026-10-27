@@ -81,4 +81,43 @@ menu "RadioVision sounder"
         range -1 82
         default 40
 
+    comment "--- Compliance (see docs/COMPLIANCE.md) ---"
+
+    config RV_TX_ACK
+        bool "RAW_DAC transmit: I am licensed (amateur) or using a dummy load / shield"
+        depends on RV_ILLUM_RAW_DAC && RV_ROLE_TX
+        default n
+        help
+            The raw-IQ transmitter operates outside the module's FCC grant. It is
+            only enabled when you confirm here that you are either licensed for the
+            13 cm amateur band or transmitting into a dummy load / shielded
+            enclosure. Left off, the TX board idles instead of radiating. The
+            keyed spreading code (sounding waveform) is always allowed; this gate
+            is only about emitting it over the air.
+
+    config RV_HAM_CALLSIGN
+        string "Amateur call sign for station ID (RAW_DAC over-air)"
+        depends on RV_ILLUM_RAW_DAC && RV_ROLE_TX
+        default ""
+        help
+            Part 97 requires you to identify your station. This is logged as a
+            reminder; you remain responsible for transmitting your ID.
+
+    config RV_PAYLOAD_ENCRYPT
+        bool "Encrypt the probe data payload (Part 15 / WIFI_CERTIFIED only)"
+        depends on RV_ILLUM_WIFI
+        default n
+        help
+            Encrypts the probe frame payload with a keystream. Only available in
+            the certified Wi-Fi (Part 15) mode: Part 97 section 97.113 forbids
+            obscuring the meaning of a message on amateur bands, so this cannot be
+            selected in RAW_DAC. The keyed SPREADING code is not affected - it is
+            a spread-spectrum sounding sequence, not message encryption, and stays
+            on in every mode.
+
+    config RV_PAYLOAD_KEY
+        string "Payload encryption key"
+        depends on RV_PAYLOAD_ENCRYPT
+        default "radiovision"
+
 endmenu
