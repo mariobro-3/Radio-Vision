@@ -1,0 +1,9 @@
+# librftest.a (esp_phy_wifi_tx_tone, force_rx_gain) needs the cert-test PHY blob.
+CONFIG_ESP_PHY_ENABLE_CERT_TEST=y
+# Fixed 240 MHz, no DFS: the dump engine's timing assumes a steady clock.
+CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y
+# CONFIG_PM_ENABLE is not set
+# Comfortable stack for the DSP task.
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=16384
+CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
+CONFIG_FREERTOS_HZ=1000

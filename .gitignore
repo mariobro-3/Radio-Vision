@@ -1,7 +1,12 @@
 # Build directories
 build/
+build_*/
 __pycache__/
 *.pyc
+*.so
+sdkconfig
+sdkconfig.tx
+sdkconfig.old
 
 # ESP-IDF generated
 sdkconfig.old

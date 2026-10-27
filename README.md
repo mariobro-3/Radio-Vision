@@ -1,182 +1,171 @@
-# Radio Vision - WiFi Motion Detection
+# RadioVision
 
-A WiFi-based motion detection system using Channel State Information (CSI) from ESP32-S3 devices. Detects human presence by analyzing how movement affects WiFi signal propagation.
+**Active Wi-Fi channel sounding for motion sensing on the ESP32-S3.** Two or more
+boards, no extra RF hardware: illuminators transmit a known, keyed, spread-spectrum
+waveform; sensors capture raw IQ, reconstruct the full channel impulse response,
+and detect people moving through the link. It uses the ESP32's own 2.4 GHz radio as
+a software-defined transceiver via the raw-IQ path, and **scales to a mesh** —
+every illuminator uses its own code, so sensors separate them by correlation (one
+link per illuminator) and you add coverage just by adding boards.
 
-## Quick Start
-
-### Hardware Required
-- 3x FeatherS3D boards (ESP32-S3)
-- USB cables for programming
-
-### Setup
-```powershell
-# 1. Source ESP-IDF
-. path/to/esp-idf/export.ps1
-
-# 2. Flash AP (replace COM_AP with your AP's port)
-cd "rv demo/WiFi-Motion-Detection/active_ap"
-idf.py build
-idf.py -p COM_AP flash
-
-# 3. Flash Clients (replace with your client ports)
-cd "../active_client"
-idf.py build
-idf.py -p COM_CLIENT1 flash
-idf.py -p COM_CLIENT2 flash
-
-# 4. Run Dashboard
-cd "../active_ap"
-python web_dashboard.py
-```
-
-> **Finding COM ports**: Open Device Manager → Ports (COM & LPT) to see which port each ESP32 is assigned to.
-
-### Access Dashboard
-1. Connect PC WiFi to `ESP32-AP` (password: `esp32-ap`)
-2. Open browser: **http://localhost:8080**
-3. Wait ~20 seconds for calibration to complete
-
----
-
-## System Architecture
+## How it works
 
 ```
-Client1 ──ping──┐
-                ├──> AP ──UDP──> Dashboard (localhost:8080)
-Client2 ──ping──┘      │
-                       ↓
-               CSI extraction
-               Motion detection
-               NeoPixel feedback
+ TX board (illuminator) ......)))   person   (((...... RX board (sensor)
+   loops a keyed ZC / Gold code         |            captures raw-IQ bursts
+   out of the radio DAC                 |            -> channel impulse response
+                                    (moves here)     -> motion
 ```
 
-### How It Works
-1. **Clients** continuously ping the AP at 100 pings/sec each
-2. **AP** extracts CSI from received packets
-3. **Temporal Amplitude Variance** algorithm detects motion
-4. **Dashboard** displays real-time status via UDP broadcast
+- **TX board** continuously replays a keyed Zadoff-Chu / Gold / m-sequence code
+  out of the radio's DAC (constant envelope, ideal autocorrelation).
+- **RX board** captures raw-IQ bursts, correlates against the known code to
+  recover the **complex channel impulse response (CIR)**, estimates and removes
+  the carrier-frequency offset between the two crystals, and detects motion as a
+  change in a **gain- and timing-invariant** feature of the channel.
+- The same waveform can carry an **encrypted DSSS data payload**, so one
+  transmission both probes the channel and links the two devices.
 
----
+All signal processing is one portable C core (`rv_dsp`) that runs **identically**
+on the host (for validation) and on the ESP32-S3.
 
-## Motion Detection Algorithm
+## Why active sounding beats standard CSI sensing
 
-Uses **Temporal Amplitude Variance** - immune to clock drift between devices.
+Standard Wi-Fi CSI sensing is **passive**: it waits for ordinary Wi-Fi packets and
+reads the channel estimate the receiver derives from the short training fields.
+You get ~52-64 subcarriers, sampled whenever a packet happens to arrive, scaled by
+an automatic gain control you don't control, with no processing gain. RadioVision
+**chooses the excitation and owns both ends**:
 
-| Step | Description |
-|------|-------------|
-| 1 | Extract I/Q values from CSI buffer |
-| 2 | Calculate amplitude: `sqrt(I² + Q²)` per subcarrier |
-| 3 | Track amplitude history over 32 packets (~160ms) |
-| 4 | Calculate variance over time for each subcarrier |
-| 5 | Sum variances across subcarriers = motion metric |
-| 6 | Compare to threshold → motion detected |
+| | standard CSI sensing | RadioVision (active sounding) |
+|---|---|---|
+| excitation | whatever ambient packets exist | a waveform you design and key |
+| channel estimate | ~52-64 subcarriers from brief training fields | full complex CIR, full band |
+| SNR | fixed by the arriving packet | **+ 10·log10(N·R) ≈ 41 dB** processing gain |
+| gain (AGC) | scales the estimate -> corrupts detection | gain-invariant feature |
+| timing / clock | not handled | CFO removed; timing-invariant feature |
+| spectrum use | needs busy channel / injected packets | **~30 dB lower PSD**, noise-like |
+| security | none | the code is the key; payload is DSSS |
 
-### Why Amplitude?
-- **Phase-based methods** are destroyed by clock drift between unsynchronized devices
-- **Amplitude** is immune - rotating phase doesn't change vector length
+The charts below quantify each row.
 
----
+## Results
 
-## Calibration
+Every number comes from running the **actual firmware DSP** (`rv_dsp.c`) over a
+2.4 GHz physics channel simulator; the same C core is proven numerically identical
+on the ESP32-S3 in QEMU. Reproduce: `validate/build_and_validate.sh`. Methodology:
+[docs/VALIDATION.md](docs/VALIDATION.md).
 
-Two-phase calibration runs on startup (~20 seconds total):
+### Detection accuracy vs standard CSI — the headline
 
-| Phase | LED | Duration | Action |
-|-------|-----|----------|--------|
-| 1 - Quiet | Pulsing Blue | ~10 sec | Keep area still |
-| 2 - Motion | Pulsing Green | ~10 sec | Wave hand through signal path |
-| Ready | Dim Blue | - | Detection active |
+![ROC: active sounding vs standard CSI amplitude variance](docs/figures/fig3_roc.png)
 
-Threshold is auto-calculated as midpoint between quiet and motion levels.
+Single-burst ROC for a weak moving reflection (−20 dB relative to the direct
+path), same physical scene for every curve. The **standard CSI amplitude-variance
+detector falls to AUC 0.53 — a coin flip — under just 3 dB of AGC gain stepping**,
+which is exactly what happens when a person changes the received power and the
+radio re-ranges its gain. RadioVision's gain-invariant feature is unaffected
+(**0.79**), shrugs off a 2 kHz carrier-frequency offset (0.74), and with a shared
+TX/RX clock reaches **0.998**. The difference is the method, not the scenario.
 
----
+### Processing gain — hear the channel below the noise floor
 
-## Network Configuration
+![Processing gain tracks input + 10 log10(N·R)](docs/figures/fig1_processing_gain.png)
 
-| Setting | Value |
-|---------|-------|
-| SSID | `ESP32-AP` |
-| Password | `esp32-ap` |
-| Channel | 1 |
-| AP IP | 192.168.4.1 |
+Correlating against a known, full-band code pulls the channel out of noise with
+**40.8 dB of processing gain** (theory 40.9 dB), and the sounder still acquires
+when the signal is **~31 dB below the noise** per sample. Standard CSI has no
+equivalent — its SNR is whatever the arriving packet delivers. This headroom is
+what lets the transmitter run at very low power (next chart).
 
-### UDP Ports
-| Port | Purpose |
-|------|---------|
-| 8848 | Status broadcast (AP → Dashboard) |
-| 8849 | Commands (Dashboard → AP) |
+### Interference footprint — quiet by design
 
----
+![DSSS PSD ~30 dB below a ping flood](docs/figures/fig4_interference_psd.png)
 
-## Dashboard Features
+For the *same* detection SNR, the keyed spread-spectrum waveform spreads its energy
+across 40 MHz at low power, so its average power spectral density sits **~30 dB
+below** a CSI-style ping flood — down near the ambient noise floor and
+statistically noise-like to anything without the key. Standard CSI instead needs
+the channel to be busy, or you inject traffic to make it busy.
 
-### Live Metrics
-- Motion status (big indicator)
-- RSSI, packets/sec, total packets
-- Variance and threshold values
-- Calibration status
+### Channel reconstruction quality
 
-### Charts
-- Motion activity (green bars)
-- Variance over time (with threshold line)
+![CIR NMSE improves ~1 dB per dB SNR](docs/figures/fig2_cir_nmse.png)
 
-### Tuning Controls
-- **Smoothing**: 0.01-0.1 (lower = smoother)
-- **Threshold**: 0-100 (motion triggers above this)
-- **Hysteresis ON/OFF**: Response timing
-- **Recalibrate**: Restart calibration
+Owning the waveform means we recover the **full complex channel impulse response**,
+and its accuracy improves about 1 dB per dB of SNR (−12 dB NMSE at 0 dB input).
+Standard CSI only ever sees a sparse, noisy frequency-response snapshot from brief
+training fields of whatever packet arrived.
 
----
+### Sensitivity
 
-## LED Status Guide
+![AUC vs how weak the moving reflection is](docs/figures/fig5_sensitivity.png)
 
-| Color | Meaning |
-|-------|---------|
-| Yellow | Starting up |
-| Pulsing Red | Disconnected |
-| Pulsing Blue | Calibration Phase 1 |
-| Pulsing Green | Calibration Phase 2 |
-| Dim Blue | Ready, no motion |
-| Bright Green | Motion detected |
-| Purple flash | Command received |
+How faint a moving reflection a *single* burst can catch under realistic
+free-running-crystal timing jitter: AUC 0.95 at −10 dB, 0.83 at −16 dB, tapering to
+chance for very weak targets. The detector's multi-burst hysteresis (it requires
+several consecutive crossings) pushes the usable operating point well beyond these
+single-burst numbers, and a shared clock lifts the whole curve toward the coherent
+limit.
 
----
+### Scaling to more devices
 
-## Project Structure
+![Link AUC vs number of simultaneous illuminators](docs/figures/fig6_scaling.png)
+
+The keyed waveform is also how the system scales. Each illuminator gets a distinct
+code (auto-derived from its MAC), they all transmit **at once on the same channel**,
+and each sensor separates them by correlation — one independent link per
+illuminator, from a single capture. Measured code isolation is **27.1 dB** (exactly
+`10·log10(N)`), so links interfere only at a `~1/N` floor: detection degrades
+gracefully from AUC 0.97 (1 illuminator) to 0.75 (8 sharing the channel). Add a
+board and it's a new code = a new link, with no coordination and no time slotting —
+and more links mean wider coverage and the basis for localizing *which* link a
+target crossed.
+
+## Repository layout
 
 ```
-rv demo/WiFi-Motion-Detection/
-├── active_ap/
-│   ├── main/main.c          # AP firmware
-│   └── web_dashboard.py     # Web dashboard
-├── active_client/
-│   └── main/main.c          # Client firmware  
-├── _components/
-│   └── csi_component.h      # CSI functions
-└── SETUP_DOCUMENTATION.md   # Detailed docs
+firmware/
+  components/rv_dsp/     portable C DSP core (waveform, CIR, CFO, |H| feature, detector)
+                        -> the SAME source runs on the host and the ESP32-S3
+  components/rv_radio/   ESP32-S3 raw-IQ capture + TX replay via the radio's own
+                        baseband path (docs/UNDOCUMENTED_PHY.md)
+  rv_sounder/            the sounder app (menuconfig: TX illuminator / RX sensor)
+  rv_selftest/           boots + runs the DSP self test (host/device identity proof)
+validate/                physics simulator + ctypes harness that calls the real C core
+docs/                    DESIGN, VALIDATION, UNDOCUMENTED_PHY, figures/
+rv demo/                 earlier passive-CSI experiment (kept for reference)
 ```
 
----
+## Build and run
 
-## Detailed Documentation
+Validation (host):
+```bash
+validate/build_and_validate.sh
+```
 
-See **[rv demo/WiFi-Motion-Detection/SETUP_DOCUMENTATION.md](rv%20demo/WiFi-Motion-Detection/SETUP_DOCUMENTATION.md)** for:
-- Complete parameter reference
-- Algorithm details
-- Troubleshooting guide
-- Future enhancement notes
+Firmware (ESP-IDF v5.5.x, esp32s3):
+```bash
+cd firmware/rv_sounder
+idf.py set-target esp32s3
+idf.py menuconfig        # RadioVision sounder -> role (TX on one board, RX on the other), key, channel
+idf.py build flash monitor
+```
 
----
+Two ways to drive the radio, both using the same `rv_dsp`:
+- **Direct (default):** flash `rv_sounder` as TX on one board and RX on the other,
+  self-contained on the ESP32-S3's own radio.
+- **Bridged:** run stock ESP-SDR on the radios and drive them over UART from a
+  controller ESP (documented serial protocol); see [docs/DESIGN.md](docs/DESIGN.md).
 
-## Credits
+> Transmitting in 2.4 GHz may require a licence. Keep TX backoff high and use a
+> dummy load / attenuated link while bringing up the TX board. The RX path is
+> passive and harmless.
 
-**Built by Cole Studer** — X: [@photoncmndr](https://x.com/photoncmndr)
+## Related work
 
-Based on [ESP32-CSI-Tool](https://github.com/StevenMHernandez/ESP32-CSI-Tool)
-
-Modified for:
-- FeatherS3D (ESP32-S3) support
-- Temporal amplitude variance algorithm
-- Web-based dashboard
-- Two-phase calibration
-- Real-time tuning
+The move from passive CSI to intentional sounding is the same direction as
+IEEE 802.11bf-2025 (WLAN Sensing) and ESPARGOS's raw-IQ "IQ Radar". RadioVision's
+angle is doing it on two commodity ESP32-S3 boards with a keyed spread-spectrum
+waveform and an on-device detector. The raw-IQ path builds on the ESP-SDR work by
+ESPARGOS, cyber-murmel, and h0m3us3r; the `rv demo/` reference is from Cole Studer.

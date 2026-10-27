@@ -1,0 +1,4 @@
+# DSP code touches sizable buffers; give the main task a comfortable stack.
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192
+# Flash size headroom for qemu images.
+CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y

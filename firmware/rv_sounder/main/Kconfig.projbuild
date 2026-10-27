@@ -1,0 +1,60 @@
+menu "RadioVision sounder"
+
+    choice RV_ROLE
+        prompt "Board role"
+        default RV_ROLE_RX
+        help
+            TX: continuously replay the sounding waveform (the illuminator).
+            RX: capture bursts and run the motion detector (the sensor).
+            Use two boards, one of each, for the bistatic link.
+
+        config RV_ROLE_TX
+            bool "TX illuminator"
+        config RV_ROLE_RX
+            bool "RX sensor"
+    endchoice
+
+    config RV_CHANNEL
+        int "Wi-Fi channel (1-13)"
+        range 1 13
+        default 1
+
+    config RV_ZC_N
+        int "Sounding code length N (Zadoff-Chu, prime)"
+        default 509
+
+    config RV_ROOT_FROM_MAC
+        bool "TX: auto-assign the code root from this board's MAC"
+        default y
+        help
+            Each illuminator derives its own Zadoff-Chu root from its MAC, so a
+            mesh self-assigns near-orthogonal codes with no coordination. Turn off
+            to use the fixed RV_ZC_U below.
+
+    config RV_ZC_U
+        int "Sounding code root u (used when not auto-assigned; gcd(u,N)=1)"
+        default 25
+
+    config RV_RX_ROOTS
+        string "RX: comma-separated code roots to track (one link per root)"
+        default "25"
+        help
+            The RX separates these simultaneous illuminators by correlation
+            (CDMA): one independent channel/link per root, from each capture.
+            List the roots your TX boards use (see each TX board's boot log).
+
+    config RV_MAX_LINKS
+        int "RX: maximum simultaneous links"
+        range 1 16
+        default 8
+
+    config RV_PERIODS
+        int "Periods integrated per RX burst (R)"
+        default 8
+
+    config RV_RX_GAIN
+        int "Fixed RX gain index (0-82, -1 = AGC)"
+        range -1 82
+        default 40
+
+endmenu
