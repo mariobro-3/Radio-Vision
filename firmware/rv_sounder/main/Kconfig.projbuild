@@ -1,5 +1,29 @@
 menu "RadioVision sounder"
 
+    choice RV_ILLUM
+        prompt "Illumination source"
+        default RV_ILLUM_RAW_DAC
+        help
+            RAW_DAC: maximum-performance raw-IQ sounding via the radio's baseband
+            DAC (keyed spread spectrum, processing gain). Open-air transmit needs
+            an amateur licence or a dummy load / shielded setup - see
+            docs/COMPLIANCE.md.
+            WIFI_CERTIFIED: the FCC-in-grant path. TX sends probe frames through
+            the certified Wi-Fi radio; RX senses via Wi-Fi CSI with the same
+            gain-invariant detector. Standard-CSI-class performance.
+
+        config RV_ILLUM_RAW_DAC
+            bool "RAW_DAC (raw-IQ, max performance)"
+        config RV_ILLUM_WIFI
+            bool "WIFI_CERTIFIED (certified Wi-Fi path, FCC-friendly)"
+    endchoice
+
+    config RV_PROBE_HZ
+        int "WIFI_CERTIFIED: probe frame rate (Hz)"
+        depends on RV_ILLUM_WIFI
+        range 10 500
+        default 200
+
     choice RV_ROLE
         prompt "Board role"
         default RV_ROLE_RX

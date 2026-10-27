@@ -5,8 +5,10 @@ __pycache__/
 *.pyc
 *.so
 sdkconfig
-sdkconfig.tx
 sdkconfig.old
+sdkconfig.tx
+sdkconfig.wifi
+sdkconfig.wifitx
 
 # ESP-IDF generated
 sdkconfig.old

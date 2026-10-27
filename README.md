@@ -130,10 +130,11 @@ firmware/
                         -> the SAME source runs on the host and the ESP32-S3
   components/rv_radio/   ESP32-S3 raw-IQ capture + TX replay via the radio's own
                         baseband path (docs/UNDOCUMENTED_PHY.md)
-  rv_sounder/            the sounder app (menuconfig: TX illuminator / RX sensor)
+  rv_sounder/            the sounder app (menuconfig: role + illumination source);
+                        main/rv_wifi.c is the certified-path illumination + CSI mode
   rv_selftest/           boots + runs the DSP self test (host/device identity proof)
 validate/                physics simulator + ctypes harness that calls the real C core
-docs/                    DESIGN, VALIDATION, UNDOCUMENTED_PHY, figures/
+docs/                    DESIGN, VALIDATION, UNDOCUMENTED_PHY, COMPLIANCE, figures/
 rv demo/                 earlier passive-CSI experiment (kept for reference)
 ```
 
@@ -158,9 +159,28 @@ Two ways to drive the radio, both using the same `rv_dsp`:
 - **Bridged:** run stock ESP-SDR on the radios and drive them over UART from a
   controller ESP (documented serial protocol); see [docs/DESIGN.md](docs/DESIGN.md).
 
-> Transmitting in 2.4 GHz may require a licence. Keep TX backoff high and use a
-> dummy load / attenuated link while bringing up the TX board. The RX path is
-> passive and harmless.
+### Illumination source (menuconfig → RadioVision sounder)
+
+- **`RAW_DAC`** (default): raw-IQ keyed spread-spectrum sounding — the high-performance
+  path with processing gain, low-PSD, and CDMA scaling.
+- **`WIFI_CERTIFIED`**: the FCC-in-grant path — the illuminator sends HT20 probe
+  frames through the **certified** Wi-Fi radio, and the sensor measures them via
+  Wi-Fi CSI using the same gain-invariant detector. No undocumented registers run.
+  This trades the processing-gain / low-interference advantages for standard-CSI-class
+  behavior that stays inside the module's FCC authorization.
+
+## Regulatory compliance
+
+The **sensing/receive side is passive and harmless.** The **raw-IQ transmitter is
+not FCC-compliant for open-air use as-is** — not because spread spectrum at 2.4 GHz
+is disallowed (§15.247 expressly allows it), but because it transmits through the
+undocumented DAC path, which operates the module outside its FCC grant and emits
+uncalibrated spurs. For open-air operation, either build the **`WIFI_CERTIFIED`**
+illumination mode above, run the raw-IQ mode **under an amateur licence** (dropping
+the encrypted DSSS payload, per §97.113), or keep it on a **dummy load / shielded
+bench**. Full analysis and the limits involved: [docs/COMPLIANCE.md](docs/COMPLIANCE.md).
+
+> Not legal advice — verify against current 47 CFR Part 15 / Part 97.
 
 ## Related work
 

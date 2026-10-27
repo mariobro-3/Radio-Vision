@@ -1,21 +1,22 @@
 /*
- * RadioVision v2 sounder - ESP32-S3, direct raw-IQ radio path.
+ * RadioVision v2 sounder - ESP32-S3.
  *
- * TX role: replays a keyed Zadoff-Chu sounding code continuously (the illuminator).
- *          Its root is auto-assigned from the board's MAC, so a mesh of boards
- *          self-assigns near-orthogonal codes with no coordination.
- * RX role: captures raw-IQ bursts and, from each single capture, separates every
- *          illuminator by correlation (CDMA) - one independent link per code root -
- *          runs the rv_dsp coherent sounder + change detector per link, and
- *          reports per-link and aggregate motion.
+ * Role (menuconfig):  TX illuminator  /  RX multistatic sensor
+ * Illumination source (menuconfig):
+ *   RAW_DAC        - raw-IQ keyed spread-spectrum sounding (max performance,
+ *                    processing gain, CDMA scaling). Open-air transmit needs an
+ *                    amateur licence or a dummy load / shield - see
+ *                    docs/COMPLIANCE.md.
+ *   WIFI_CERTIFIED - FCC-in-grant path: TX sends HT20 probe frames on the
+ *                    certified Wi-Fi radio, RX senses via Wi-Fi CSI with the same
+ *                    gain-invariant detector (standard-CSI-class performance).
  *
- * Flash TX on one or more boards and RX on one or more boards (menuconfig ->
- * RadioVision sounder). Scales by adding boards: each new illuminator is a new
- * code = a new link the sensors pick up.
+ * The rv_dsp detector is shared by both modes.
  */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_log.h"
@@ -24,16 +25,84 @@
 #include "sdkconfig.h"
 
 #include "rv_dsp.h"
+#if CONFIG_RV_ILLUM_WIFI
+#include "rv_wifi.h"
+#else
 #include "rv_radio.h"
+#endif
 
 static const char *TAG = "rv_sounder";
 
 #define N        CONFIG_RV_ZC_N
 #define R        CONFIG_RV_PERIODS
 #define CHANNEL  CONFIG_RV_CHANNEL
+
+/* ================================================================== *
+ *  WIFI_CERTIFIED illumination (certified radio path, FCC-in-grant)
+ * ================================================================== */
+#if CONFIG_RV_ILLUM_WIFI
+
+#define RV_CSI_BINS 64
+
+#if !CONFIG_RV_ROLE_TX
+static rv_detector s_csi_det;
+static float       s_csi_feat[RV_CSI_BINS];
+static uint32_t    s_csi_count;
+
+/* Wi-Fi CSI callback: |CSI| per subcarrier -> mean-normalize -> detector.
+ * Same gain-invariant feature and detector as the raw-IQ path. */
+static void csi_cb(void *ctx, wifi_csi_info_t *info)
+{
+    (void)ctx;
+    if (!info || !info->buf || info->len < 2 * RV_CSI_BINS) return;
+    const int8_t *b = info->buf;
+    float sum = 0.0f;
+    for (int k = 0; k < RV_CSI_BINS; k++) {
+        float q = (float)b[2 * k];
+        float i = (float)b[2 * k + 1];
+        float a = sqrtf(i * i + q * q);
+        s_csi_feat[k] = a;
+        sum += a;
+    }
+    float inv = (sum > 1e-6f) ? (RV_CSI_BINS / sum) : 1.0f;
+    for (int k = 0; k < RV_CSI_BINS; k++) s_csi_feat[k] *= inv;
+    rv_detector_update(&s_csi_det, s_csi_feat);
+
+    if ((s_csi_count++ & 0x7f) == 0) {
+        ESP_LOGI(TAG, "%s motion=%d metric=%.4f rssi=%d",
+                 s_csi_det.phase == RV_CAL_READY ? "RDY" : "CAL",
+                 (int)s_csi_det.motion, s_csi_det.last_metric, info->rx_ctrl.rssi);
+    }
+}
+#endif
+
+void app_main(void)
+{
+    ESP_LOGI(TAG, "RadioVision v2 (WIFI_CERTIFIED)  ch=%d", CHANNEL);
+    ESP_ERROR_CHECK(rv_wifi_init(CHANNEL));
+#if CONFIG_RV_ROLE_TX
+    ESP_LOGI(TAG, "role=TX: certified Wi-Fi probe at %d Hz", CONFIG_RV_PROBE_HZ);
+    const TickType_t period = pdMS_TO_TICKS(1000 / CONFIG_RV_PROBE_HZ);
+    while (1) {
+        rv_wifi_tx_probe();
+        vTaskDelay(period > 0 ? period : 1);
+    }
+#else
+    ESP_LOGI(TAG, "role=RX: Wi-Fi CSI sensing");
+    rv_detector_init(&s_csi_det, RV_CSI_BINS, 0.02f, 6.0f, 200, 3, 8);
+    ESP_ERROR_CHECK(rv_wifi_csi_start(csi_cb));
+    while (1) vTaskDelay(pdMS_TO_TICKS(1000));
+#endif
+}
+
+/* ================================================================== *
+ *  RAW_DAC illumination (raw-IQ keyed spread spectrum, max performance)
+ * ================================================================== */
+#else  /* !CONFIG_RV_ILLUM_WIFI */
+
 #define MAX_LINKS CONFIG_RV_MAX_LINKS
-#define RV_TAPS  64
-#define RV_BINS  64
+#define RV_TAPS   64
+#define RV_BINS   64
 
 static rv_cf      *s_rx;                 /* (R+1)*N : capture buffer          */
 static rv_cf      *s_scratch;            /* R*N : per-period CIR workspace    */
@@ -84,9 +153,8 @@ static void rx_setup_links(void)
 
 void app_main(void)
 {
-    ESP_LOGI(TAG, "RadioVision v2 sounder  N=%d R=%d ch=%d  free=%u",
+    ESP_LOGI(TAG, "RadioVision v2 (RAW_DAC)  N=%d R=%d ch=%d  free=%u",
              N, R, CHANNEL, (unsigned)esp_get_free_heap_size());
-
     ESP_ERROR_CHECK(rv_radio_init(CHANNEL));
     rv_radio_set_rx_gain(CONFIG_RV_RX_GAIN);
 
@@ -142,3 +210,5 @@ void app_main(void)
     }
 #endif
 }
+
+#endif /* CONFIG_RV_ILLUM_WIFI */
